@@ -28,13 +28,9 @@ function main(cache_local) {
         }
         var vocabDictionary = {};
         await importWaniKaniVocab(vocabDictionary, cache_sync, cache_local, apiKey);
-        console.log("Total entries from WaniKani: " + Object.keys(vocabDictionary).length);
         importGoogleVocab(vocabDictionary, cache_local, cache_sync);
-        console.log("Total entries after Google Spreadsheets: " + Object.keys(vocabDictionary).length);
         importCustomVocab(vocabDictionary, cache_local, cache_sync);
-        console.log("Total entries after CustomVocab: " + Object.keys(vocabDictionary).length);
         vocabDictionary = numberRemoval(vocabDictionary, cache_local, cache_sync);
-        console.log("Total entries after NumberRemoval: " + Object.keys(vocabDictionary).length);
 
         var dictionaryCallback = buildDictionaryCallback(
             cache_local,
@@ -46,6 +42,66 @@ function main(cache_local) {
         );
 
         $("body *:not(noscript):not(script):not(style)").replaceText(/\b(\S+?)\b/g, dictionaryCallback);
+
+        // After text replacement, add event listeners
+        // Add this after the replaceText call in main
+
+        var audio_settings = cache_sync[AUDIO_KEY];
+        var audio_on = true;
+        var audio_on_click = false;
+        if (audio_settings) {
+            audio_on = audio_settings.on;
+            audio_on_click = audio_settings.clicked;
+        }
+
+        var wk_vocab_list = {};
+        if (cache_local.wanikanify_vocab) {
+            wk_vocab_list = cache_local.wanikanify_vocab.vocabList;
+        }
+
+        var gc = {};
+        if (cache_local.wanikanify_googleVocabKey) {
+            gc = cache_local.wanikanify_googleVocabKey.collections;
+        }
+
+        $(".wanikanified").each(function() {
+            var element = this;
+            var en = element.getAttribute("data-en");
+            var jp = element.getAttribute("data-jp");
+            var url = element.getAttribute("data-url");
+
+            // Single click handler that handles both toggle and audio
+            element.addEventListener("click", function() {
+                // Toggle the text
+                var t = this.title;
+                this.title = this.innerHTML;
+                this.innerHTML = t;
+                
+                // Play audio if enabled and set to click mode
+                if (audio_on && audio_on_click) {
+                    var msg = new SpeechSynthesisUtterance();
+                    msg.text = url;
+                    msg.lang = 'ja-JP';
+                    window.speechSynthesis.speak(msg);
+                }
+            });
+
+            // Mouseover/mouseout handlers for hover audio
+            if (audio_on && !audio_on_click) {
+                var timer1;
+                element.addEventListener("mouseover", function() {
+                    timer1 = setTimeout(function() {
+                        var msg = new SpeechSynthesisUtterance();
+                        msg.text = url;
+                        msg.lang = 'ja-JP';
+                        window.speechSynthesis.speak(msg);
+                    }, 700);
+                });
+                element.addEventListener("mouseout", function() {
+                    clearTimeout(timer1);
+                });
+            }
+        });
     });
 }
 
@@ -413,19 +469,12 @@ function buildDictionaryCallback(
 
 
         // FIX: Lots of duplication here.
-        if (audio_on) {
-            if (audio_on_click) {
-                return '<span class="wanikanified" title="' + str + '" data-en="' + str + '" data-jp="' + kanji +
-                    '" onClick="var msg = new SpeechSynthesisUtterance(); msg.text = \'' + url + '\'; msg.lang = \'ja-JP\';window.speechSynthesis.speak(msg); var t = this.getAttribute(\'title\'); this.setAttribute(\'title\', this.innerHTML); this.innerHTML = t;">' + kanji + '<\/span>';
-            } else {
-                return '<span class="wanikanified" title="' + str + '" data-en="' + str + '" data-jp="' + kanji +
-                    '" onmouseover="timer1=setTimeout(function(){var msg = new SpeechSynthesisUtterance(); msg.text = \'' + url + '\'; msg.lang = \'ja-JP\';window.speechSynthesis.speak(msg);}, 700);" onmouseout="clearTimeout(timer1);" onClick="var t = this.getAttribute(\'title\'); this.setAttribute(\'title\', this.innerHTML); this.innerHTML = t;">' + kanji + '<\/span>';
-            }
-        }
-        else {
-                return '<span class="wanikanified" title="' + str + '" data-en="' + str + '" data-jp="' + kanji +
-                    '" onClick="var t = this.getAttribute(\'title\'); this.setAttribute(\'title\', this.innerHTML); this.innerHTML = t;">' + kanji + '<\/span>';
-        }
+        var span = '<span class="wanikanified" title="' + str + '" data-en="' + str + '" data-jp="' + kanji + '" data-url="' + url + '">' + kanji + '<\/span>';
+        
+        // Add event listeners after the element is created
+        // We need to return the span and add listeners separately
+        // But since replaceText replaces text, we need to wrap it
+        return span;
     }
 }
 

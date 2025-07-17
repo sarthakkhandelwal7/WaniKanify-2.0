@@ -14,7 +14,7 @@ function save_popup() {
         "wanikanify_removeNumbers": "Yes"
     }
     chrome.storage.sync.set(defaultOptions, function() {
-        chrome.browserAction.setPopup({popup:""});
+        chrome.action.setPopup({popup:""});
         window.close();
     });
 }    

@@ -1,5 +1,20 @@
 var executed = {}
 
+// Initialize extension settings on install/startup
+chrome.runtime.onInstalled.addListener(function(details) {
+    if (details.reason === "install" || details.reason === "update") {
+        // Initialize blacklist if it doesn't exist
+        chrome.storage.sync.get(['wanikanify_blackList'], function(items) {
+            if (!items.wanikanify_blackList) {
+                // Set default blacklist with essential blocked patterns
+                chrome.storage.sync.set({"wanikanify_blackList": []}, function() {
+                    console.log("WaniKanify: Initialized empty blacklist");
+                });
+            }
+        });
+    }
+});
+
 // Injects JS into the tab.
 // executeScripts : Object ->
 function executeScripts(tab) {
@@ -14,21 +29,32 @@ function executeScripts(tab) {
                     if (blackList.length == 0) {
                         return false;
                     } else {
-                        var matcher = new RegExp($.map(items.wanikanify_blackList, function(val) { return '('+val+')';}).join('|'));
+                        var matcher = new RegExp(blackList.map(function(val) { return '('+val+')';}).join('|'));
                         return matcher.test(url);
                     }
                 }
                 return false;
             }
 
-
             if (!isBlackListed(details, items)) {
-                chrome.tabs.executeScript(null, { file: "js/jquery.js" }, function() {
-                    chrome.tabs.executeScript(null, { file: "js/replaceText.js" }, function() {
-                        chrome.tabs.executeScript(null, { file: "js/content.js" }, function() {
-                            executed[tab] = "jp";
-                        });
+                // Inject scripts in sequence using Manifest V3 scripting API
+                chrome.scripting.executeScript({
+                    target: { tabId: tab },
+                    files: ["js/jquery.js"]
+                }).then(() => {
+                    return chrome.scripting.executeScript({
+                        target: { tabId: tab },
+                        files: ["js/replaceText.js"]
                     });
+                }).then(() => {
+                    return chrome.scripting.executeScript({
+                        target: { tabId: tab },
+                        files: ["js/content.js"]
+                    });
+                }).then(() => {
+                    executed[tab] = "jp";
+                }).catch((error) => {
+                    console.error("Error injecting scripts:", error);
                 });
             } else {
                 console.log("WaniKanify blacklisted on this site!");
@@ -56,11 +82,35 @@ function loadOnUpdated(tab, change) {
 
 // Toggles the 'wanikanified' elements already on the page.
 // setLanguage : String ->
-function setLanguage(lang) {
-    var inner = "data-" + lang;
-    var title = "data-" + (lang == "jp" ? "en" : "jp");
-    chrome.tabs.executeScript(null,
-        {code:"$(\".wanikanified\").each(function(index, value) { value.innerHTML = value.getAttribute('" + inner + "'); value.title = value.getAttribute('" + title + "'); })"});
+function setLanguage(lang, tabId) {
+    chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        func: function(lang) {
+            // Use vanilla JavaScript instead of jQuery
+            var elements = document.querySelectorAll(".wanikanified");
+            
+            for (var i = 0; i < elements.length; i++) {
+                var element = elements[i];
+                
+                // Check if the element is currently showing Japanese or English
+                var dataJp = element.getAttribute('data-jp');
+                var dataEn = element.getAttribute('data-en');
+                
+                if (lang === 'jp') {
+                    // Set to Japanese
+                    element.innerHTML = dataJp;
+                    element.title = dataEn;
+                } else {
+                    // Set to English
+                    element.innerHTML = dataEn;
+                    element.title = dataJp;
+                }
+            }
+        },
+        args: [lang]
+    }).catch((error) => {
+        console.error("Error in setLanguage:", error);
+    });
 }
 
 // Function for handling browser button clicks.
@@ -70,7 +120,7 @@ function buttonClicked(tab) {
     if (lang) {
         lang = (lang == "jp" ? "en" : "jp");
         executed[tab.id] = lang;
-        setLanguage(lang);
+        setLanguage(lang, tab.id);
     } else {
         executeScripts(tab.id);
     }
@@ -231,7 +281,7 @@ chrome.runtime.onMessage.addListener(
 );
 
 // Always execute scripts when the action is clicked.
-chrome.browserAction.onClicked.addListener(buttonClicked);
+chrome.action.onClicked.addListener(buttonClicked);
 
 // Always listen for loads or reloads to clear from the cache
 chrome.tabs.onUpdated.addListener(clearStatus);
@@ -278,6 +328,6 @@ chrome.storage.sync.get(["wanikanify_runOn","wanikanify_apiKey"], function(items
     //chrome.contextMenus.create(context);
 
     if (!items.wanikanify_apiKey) {
-        chrome.browserAction.setPopup({popup:"popup.html"});
+        chrome.action.setPopup({popup:"popup.html"});
     }
 });
