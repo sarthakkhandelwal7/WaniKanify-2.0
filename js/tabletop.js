@@ -118,12 +118,7 @@
     this.model_names = [];
 
     this.base_json_path = "/feeds/worksheets/" + this.key + "/public/basic?alt=";
-
-    if (inNodeJS || supportsCORS) {
-      this.base_json_path += 'json';
-    } else {
-      this.base_json_path += 'json-in-script';
-    }
+    this.base_json_path += 'json';
     
     if(!this.wait) {
       this.fetch();
@@ -160,14 +155,7 @@
       if (inNodeJS) {
         this.serverSideFetch(path, callback);
       } else {
-        //CORS only works in IE8/9 across the same protocol
-        //You must have your server on HTTPS to talk to Google, or it'll fall back on injection
-        var protocol = this.endpoint.split("//").shift() || "http";
-        if (supportsCORS && (!inLegacyIE || protocol === location.protocol)) {
-          this.xhrFetch(path, callback);
-        } else {
-          this.injectScript(path, callback);
-        }
+        this.xhrFetch(path, callback);
       }
     },
 
@@ -194,58 +182,6 @@
         callback.call(self, json);
       };
       xhr.send();
-    },
-    
-    /*
-      Insert the URL into the page as a script tag. Once it's loaded the spreadsheet data
-      it triggers the callback. This helps you avoid cross-domain errors
-      http://code.google.com/apis/gdata/samples/spreadsheet_sample.html
-
-      Let's be plain-Jane and not use jQuery or anything.
-    */
-    injectScript: function(path, callback) {
-      var script = document.createElement('script');
-      var callbackName;
-      
-      if(this.singleton) {
-        if(callback === this.loadSheets) {
-          callbackName = 'Tabletop.singleton.loadSheets';
-        } else if (callback === this.loadSheet) {
-          callbackName = 'Tabletop.singleton.loadSheet';
-        }
-      } else {
-        var self = this;
-        callbackName = 'tt' + (+new Date()) + (Math.floor(Math.random()*100000));
-        // Create a temp callback which will get removed once it has executed,
-        // this allows multiple instances of Tabletop to coexist.
-        Tabletop.callbacks[ callbackName ] = function () {
-          var args = Array.prototype.slice.call( arguments, 0 );
-          callback.apply(self, args);
-          script.parentNode.removeChild(script);
-          delete Tabletop.callbacks[callbackName];
-        };
-        callbackName = 'Tabletop.callbacks.' + callbackName;
-      }
-      
-      var url = path + "&callback=" + callbackName;
-      
-      if(this.simple_url) {
-        // We've gone down a rabbit hole of passing injectScript the path, so let's
-        // just pull the sheet_id out of the path like the least efficient worker bees
-        if(path.indexOf("/list/") !== -1) {
-          script.src = this.endpoint + "/" + this.key + "-" + path.split("/")[4];
-        } else {
-          script.src = this.endpoint + "/" + this.key;
-        }
-      } else {
-        script.src = this.endpoint + url;
-      }
-      
-      if (this.parameterize) {
-        script.src = this.parameterize + encodeURIComponent(script.src);
-      }
-      
-      document.getElementsByTagName('script')[0].parentNode.appendChild(script);
     },
     
     /* 
@@ -336,11 +272,7 @@
           var linkIdx = data.feed.entry[i].link.length-1;
           var sheet_id = data.feed.entry[i].link[linkIdx].href.split('/').pop();
           var json_path = "/feeds/list/" + this.key + "/" + sheet_id + "/public/values?alt="
-          if (inNodeJS || supportsCORS) {
-            json_path += 'json';
-          } else {
-            json_path += 'json-in-script';
-          }
+          json_path += 'json';
           if(this.query) {
             json_path += "&sq=" + this.query;
           }
